@@ -1,10 +1,27 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <title>Calendar Demo</title>
 
+    <style>
+      h1 {
+        text-align: center;
+      }
+
+      #calendar {
+        display: block;
+        width: 50vw;
+        height: 50vh;
+        margin: auto;
+      }
+    </style>
   </head>
   <body>
-    <div id="calendar"></div>
+    <h1>Calendar Demo</h1>
+    <event-calendar id="calendar">
+      <button slot="controls" data-calendar-control="previous">Previous</button>
+      <button slot="controls" data-calendar-control="next">Next</button>
+    </event-calendar>
 
     <script type="importmap">
       {
