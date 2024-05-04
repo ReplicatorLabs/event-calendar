@@ -1,17 +1,12 @@
-import { DateTime } from "luxon";
+import { DateTime, Duration, Interval } from "luxon";
 
 class Event {
   constructor(data) {
-    this.start = data.start;
-    this.end = data.end;
+    this.interval = data.interval;
     this.title = data.title;
 
-    if (!DateTime.isDateTime(this.start)) {
-      throw new Error("start parameter must be a DateTime instance");
-    }
-
-    if (!DateTime.isDateTime(this.end)) {
-      throw new Error("end parameter must be a DateTime instance");
+    if (!Interval.isInterval(this.interval)) {
+      throw new Error("interval parameter must be an Interval instance");
     }
   }
 }
@@ -73,7 +68,7 @@ EventCalendarStyleSheet.replaceSync(`
 .data-month {
   /* items are days in the month */
   grid-template-columns: repeat(7, 1fr); /* 7 days per week */
-  grid-template-rows: repeat(5, minmax(2em, 1fr)); /* 5 weeks per month */
+  grid-template-rows: repeat(6, minmax(2em, 1fr)); /* 5 weeks per month */
 }
 
 .item {
@@ -98,6 +93,14 @@ EventCalendarStyleSheet.replaceSync(`
   background-color: #888;
   border: 1px solid black;
 }
+
+.event {
+  height: max-content;
+  padding: 0 0.5rem;
+
+  background-color: #8f8;
+  border: 1px solid black;
+}
 `);
 
 // https://developer.mozilla.org/en-US/docs/Web/API/Web_components/Using_custom_elements
@@ -107,6 +110,7 @@ class EventCalendarElement extends HTMLElement {
 
     // internal state
     this.cursor = DateTime.now().startOf('day');
+    this.events = new Map();
 
     // DOM
     this.rootElement = this.attachShadow({mode: "open"});
@@ -130,9 +134,11 @@ class EventCalendarElement extends HTMLElement {
     this.dataElement.classList.add('data-month');
 
     this.itemElements = new Map();
-    for (var wi = 0; wi < 5; wi++) {
+    for (var wi = 0; wi < 6; wi++) {
       for (var di = 0; di < 7; di++) {
         const itemElement = this.dataElement.appendChild(document.createElement('div'));
+        itemElement.setAttribute('data-week-index', wi);
+        itemElement.setAttribute('data-day-index', di);
         itemElement.classList.add('item');
 
         // track the item element
@@ -152,6 +158,9 @@ class EventCalendarElement extends HTMLElement {
       }
     }
 
+    // DOM for events
+    this.eventElements = new Map();
+
     // initial refresh
     this.refresh();
   }
@@ -161,24 +170,24 @@ class EventCalendarElement extends HTMLElement {
    */
 
   async connectedCallback() {
-    // TODO: connect event handlers
-
-    // connect event handlers for controls
-    const previousButtonElement = this.headerElement.querySelector('button[data-calendar-control="previous"]');
-    console.log(previousButtonElement);
+    // TODO: connect event handlers for controls
+    // this.headerElement.assignedElements().forEach(function (element) {
+    //   if (element.getAttribute('data-calendar-control')) {
+    //     console.log(element);
+    //   }
+    // });
   }
 
   async disconnectedCallback() {
-    // console.log("Custom element removed from page.");
-    // TODO: disconnect event handlers
+    // TODO: disconnect event handlers for controls
   }
 
   async adoptedCallback() {
-    // console.log("Custom element moved to new page.");
+    // XXX: do we need to do anything?
   }
 
   async attributeChangedCallback(name, oldValue, newValue) {
-    // console.log(`Attribute ${name} has changed.`);
+    // TODO: update configuration
   }
 
   /**
@@ -186,45 +195,156 @@ class EventCalendarElement extends HTMLElement {
    */
 
   refresh() {
-    // update item elements based on the cursor
-    const viewStart = this.cursor.startOf('month').startOf('week');
-    var viewDayIndex = 0;
+    // determine the view interval
+    const viewInterval = Interval.after(
+      this.cursor.startOf('month').startOf('week'),
+      Duration.fromObject({days: this.itemElements.size}));
 
-    for (var wi = 0; wi < 5; wi++) {
-      for (var di = 0; di < 7; di++) {
-        const itemElement = this.itemElements.get(`${wi}-${di}`);
-        const itemHeaderElement = itemElement.querySelector('.item-header');
+    // update item elements
+    const viewDayIntervals = viewInterval.splitBy(Duration.fromObject({days: 1}));
+    const viewElements = Array.from(this.itemElements.values());
 
-        const itemDateTime = viewStart.plus({day: viewDayIndex});
-        viewDayIndex++;
+    const viewPairs = Array.from(
+      Array(Math.max(viewDayIntervals.length, viewElements.length)),
+      function (_, i) {
+        return [viewDayIntervals[i].start, viewElements[i]];
+      });
 
-        // update the item header
-        itemHeaderElement.innerText = itemDateTime.toFormat('M/dd'); // XXX: customize format through config
+    viewPairs.forEach(function (pair) {
+      const itemDateTime = pair[0];
+      const itemElement = pair[1];
 
-        // update item style to indicate the current day
-        if (itemDateTime.hasSame(this.cursor, 'day')) {
-          itemElement.classList.add('item-present');
-        }
-        // current month
-        else if (itemDateTime.hasSame(this.cursor, 'month')) {
-          itemElement.classList.add('item-nearby');
-        }
-        // everything else
-        else {
-          itemElement.classList.add('item-faraway');
-        }
+      // reset the highest event offset in preparation for placing events
+      // on the calendar below
+      itemElement.setAttribute('data-event-offset', 0);
+
+      // update item style to indicate the current day
+      if (itemDateTime.hasSame(this.cursor, 'day')) {
+        itemElement.classList.add('item-present');
       }
+      // current month
+      else if (itemDateTime.hasSame(this.cursor, 'month')) {
+        itemElement.classList.add('item-nearby');
+      }
+      // everything else
+      else {
+        itemElement.classList.add('item-faraway');
+      }
+
+      // update the item header
+      // XXX: customize format through config
+      const itemHeaderElement = itemElement.querySelector('.item-header');
+      itemHeaderElement.innerText = itemDateTime.toFormat('M/dd');
+    }.bind(this));
+
+    // delete existing event elements
+    this.eventElements.forEach(function (value) {
+      value.forEach(function (element) {
+        this.dataElement.removeChild(element);
+      }.bind(this));
+    }.bind(this));
+
+    // filter events to ones overlapping with the current view
+    // reason: avoid doing work for events that we can't see at all
+    const visibleEventIds = new Array();
+    this.events.forEach(function (event, eventId) {
+      if (viewInterval.overlaps(event.interval)) {
+        visibleEventIds.push(eventId);
+      }
+    });
+
+    // corner case: no visible events
+    if (visibleEventIds.length == 0) {
+      // skip the remaining work
+      return;
     }
 
-    // TODO: update event elements
+    // sort events based on the number of days they encompass in decreasing order
+    // reason: place events onto the calendar in a consistent order
+    // reason: place events that span multiple days earlier than events that span fewer days
+    // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort#comparefn
+    visibleEventIds.sort(function (a, b) {
+      const ad = this.events.get(a).interval.length('day');
+      const bd = this.events.get(b).interval.length('day');
+      return bd - ad;
+    }.bind(this));
+
+    // create event elements for visible events
+    visibleEventIds.forEach(function (eventId) {
+      const event = this.events.get(eventId);
+      const visibleInterval = (Interval
+        .fromDateTimes(
+          event.interval.start.startOf('day'),
+          event.interval.end.endOf('day'))
+        .intersection(viewInterval));
+
+      // XXX
+      const visibleDayDateTimes = (visibleInterval
+        .splitBy(Duration.fromObject({days: 1}))
+        .map((interval) => interval.start));
+
+      // XXX
+      const itemElements = (visibleDayDateTimes
+        .map((dayDateTime) => dayDateTime.diff(viewInterval.start).as('days'))
+        .map((dayIndex) => viewElements[dayIndex]));
+
+      const eventOffset = 1 + Math.max(...itemElements
+        .map((element) => parseInt(element.getAttribute('data-event-offset'), 10)));
+
+      // XXX
+      itemElements.forEach(function (element) {
+        element.setAttribute('data-event-offset', eventOffset);
+      });
+
+      // TODO
+      const eventElements = new Array();
+      const visibleWeekIntervals = visibleInterval.splitBy(Duration.fromObject({weeks: 1}));
+      visibleWeekIntervals.forEach(function (weekInterval) {
+        const firstDayElement = viewElements[Math.floor(weekInterval.start.diff(viewInterval.start).as('days'))];
+        const weekStart = parseInt(firstDayElement.getAttribute('data-week-index'), 10);
+        const dayStart = parseInt(firstDayElement.getAttribute('data-day-index'), 10);
+
+        const lastDayElement = viewElements[Math.floor(weekInterval.end.diff(viewInterval.start).as('days'))];
+        const dayEnd = parseInt(lastDayElement.getAttribute('data-day-index'), 10);
+
+        // XXX
+        const eventElement = this.dataElement.appendChild(document.createElement('div'));
+        eventElement.setAttribute('data-event-id', eventId);
+        eventElement.setAttribute('data-event-offset', eventOffset);
+        eventElement.classList.add('event');
+
+        // update event element title
+        // XXX: customize this from config
+        eventElement.innerText = event.title;
+
+        // update event element grid position and offset
+        eventElement.style = `
+          grid-column-start: ${dayStart + 1};
+          grid-column-end: ${dayEnd + 2};
+          grid-row-start: ${weekStart + 1};
+          grid-row-end: ${weekStart + 2};
+          margin-top: calc(0.75rem + (1.75rem * ${eventOffset}));
+        `;
+
+        // XXX
+        eventElements.push(eventElement);
+      }.bind(this));
+
+      // XXX
+      this.eventElements.set(eventId, eventElements);
+    }.bind(this));
   }
 
   addEvent(id, event) {
+    if (this.events.has(id)) {
+      throw new Error("id parameter is already in use in this calendar instance");
+    }
+
     if (!(event instanceof Event)) {
       throw new Error("event parameter must be an Event instance");
     }
 
-    // TODO: implement this
+    this.events.set(id, event);
   }
 }
 
