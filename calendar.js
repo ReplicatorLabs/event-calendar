@@ -35,9 +35,21 @@ EventCalendarStyleSheet.replaceSync(`
   border: 1px solid black;
 }
 
-.controls {
+.header {
   /* parent flex layout */
-  flex: none;
+  flex: 0 0 auto;
+
+  /* children flex layout */
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.footer {
+  /* parent flex layout */
+  flex: 0 0 auto;
 
   /* children flex layout */
   display: flex;
@@ -53,12 +65,38 @@ EventCalendarStyleSheet.replaceSync(`
 
   /* child grid layout */
   display: grid;
+
+  /* style */
+  grid-gap: 0.5rem;
 }
 
 .data-month {
   /* items are days in the month */
   grid-template-columns: repeat(7, 1fr); /* 7 days per week */
   grid-template-rows: repeat(5, minmax(2em, 1fr)); /* 5 weeks per month */
+}
+
+.item {
+}
+
+.item-present {
+  background-color: #88f;
+}
+
+.item-nearby {
+  background-color: #888;
+}
+
+.item-faraway {
+  background-color: #ccc;
+}
+
+.item-header {
+  margin: 0;
+  padding: 0 0.5rem;
+
+  background-color: #888;
+  border: 1px solid black;
 }
 `);
 
@@ -68,8 +106,7 @@ class EventCalendarElement extends HTMLElement {
     super();
 
     // internal state
-    this.cursor = DateTime.now();
-    this.events = new Array();
+    this.cursor = DateTime.now().startOf('day');
 
     // DOM
     this.rootElement = this.attachShadow({mode: "open"});
@@ -79,33 +116,56 @@ class EventCalendarElement extends HTMLElement {
     this.containerElement.classList.add('container');
 
     this.headerElement = this.containerElement.appendChild(document.createElement('slot'));
-    this.headerElement.setAttribute('name', 'controls');
-    this.headerElement.classList.add('controls');
+    this.headerElement.setAttribute('name', 'header');
+    this.headerElement.classList.add('header');
 
     this.dataElement = this.containerElement.appendChild(document.createElement('div'));
     this.dataElement.classList.add('data');
+
+    this.footerElement = this.containerElement.appendChild(document.createElement('slot'));
+    this.footerElement.setAttribute('name', 'footer');
+    this.footerElement.classList.add('footer');
+
+    // DOM for Month view
     this.dataElement.classList.add('data-month');
 
-    // DEBUG: need to specify grid-area explicitly though to allow overlap
-    for (var i = 0; i < 32; i++) {
-      const element = this.dataElement.appendChild(document.createElement('div'));
-      element.innerText = i;
+    this.itemElements = new Map();
+    for (var wi = 0; wi < 5; wi++) {
+      for (var di = 0; di < 7; di++) {
+        const itemElement = this.dataElement.appendChild(document.createElement('div'));
+        itemElement.classList.add('item');
+
+        // track the item element
+        this.itemElements.set(`${wi}-${di}`, itemElement);
+
+        // position the item in the data grid
+        itemElement.style = `
+          grid-column-start: ${di + 1};
+          grid-column-end: ${di + 2};
+          grid-row-start: ${wi + 1};
+          grid-row-end: ${wi + 2};
+        `;
+
+        // create the item header
+        const itemHeaderElement = itemElement.appendChild(document.createElement('h2'));
+        itemHeaderElement.classList.add('item-header');
+      }
     }
 
-    /*
-    const foo = this.dataElement.appendChild(document.createElement('div'));
-    foo.innerText = 'foo';
-    foo.style = 'grid-area: 2 / 2 / 2 / 2;';
-
-    const bar = this.dataElement.appendChild(document.createElement('div'));
-    foo.innerText = 'bar';
-    foo.style = 'grid-area: 2 / 2 / 2 / 2;';
-    */
+    // initial refresh
+    this.refresh();
   }
 
+  /**
+   * Web Component Lifecycle Hooks
+   */
+
   async connectedCallback() {
-    // console.log("Custom element added to page.");
     // TODO: connect event handlers
+
+    // connect event handlers for controls
+    const previousButtonElement = this.headerElement.querySelector('button[data-calendar-control="previous"]');
+    console.log(previousButtonElement);
   }
 
   async disconnectedCallback() {
@@ -121,12 +181,50 @@ class EventCalendarElement extends HTMLElement {
     // console.log(`Attribute ${name} has changed.`);
   }
 
-  addEvent(event) {
+  /**
+   * Public Interface
+   */
+
+  refresh() {
+    // update item elements based on the cursor
+    const viewStart = this.cursor.startOf('month').startOf('week');
+    var viewDayIndex = 0;
+
+    for (var wi = 0; wi < 5; wi++) {
+      for (var di = 0; di < 7; di++) {
+        const itemElement = this.itemElements.get(`${wi}-${di}`);
+        const itemHeaderElement = itemElement.querySelector('.item-header');
+
+        const itemDateTime = viewStart.plus({day: viewDayIndex});
+        viewDayIndex++;
+
+        // update the item header
+        itemHeaderElement.innerText = itemDateTime.toFormat('M/dd'); // XXX: customize format through config
+
+        // update item style to indicate the current day
+        if (itemDateTime.hasSame(this.cursor, 'day')) {
+          itemElement.classList.add('item-present');
+        }
+        // current month
+        else if (itemDateTime.hasSame(this.cursor, 'month')) {
+          itemElement.classList.add('item-nearby');
+        }
+        // everything else
+        else {
+          itemElement.classList.add('item-faraway');
+        }
+      }
+    }
+
+    // TODO: update event elements
+  }
+
+  addEvent(id, event) {
     if (!(event instanceof Event)) {
       throw new Error("event parameter must be an Event instance");
     }
 
-    this.events.push(event);
+    // TODO: implement this
   }
 }
 
