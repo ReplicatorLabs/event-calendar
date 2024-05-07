@@ -68,7 +68,8 @@ EventCalendarStyleSheet.replaceSync(`
 .data-month {
   /* items are days in the month */
   grid-template-columns: repeat(7, 1fr); /* 7 days per week */
-  grid-template-rows: repeat(6, 1fr); /* 6 weeks per month */
+  /* grid-template-rows: repeat(6, 1fr); */ /* 6 weeks per month, disabled due to sizing issue */
+  grid-auto-rows: fit-content(1fr);
 }
 
 /* items */
@@ -115,7 +116,6 @@ EventCalendarStyleSheet.replaceSync(`
 
 .event {
   height: max-content;
-  padding: 0 0.5rem;
 
   background-color: #8f8;
   border: 1px solid black;
@@ -360,12 +360,18 @@ class EventCalendarElement extends HTMLElement {
         eventElement.innerText = event.title;
 
         // update event element grid position and offset
+        // TODO: the problem with this is the grid cell minimum size is based
+        // on the minimum size of it's contents which in this case is dominated
+        // by the largest margin-top of it's event elements. each grid cell is
+        // going to have the same height so unfortunately that means a few
+        // events on one day stretch out the entire calendar size including for
+        // weeks that have nothing on them.
         eventElement.style = `
           grid-column-start: ${dayStart + 1};
           grid-column-end: ${dayEnd + 2};
           grid-row-start: ${weekStart + 1};
           grid-row-end: ${weekStart + 2};
-          margin-top: calc(0.75rem + (1.75rem * ${eventOffset}));
+          margin-top: calc(2.1rem + (1.5rem * ${eventOffset - 1}));
         `;
 
         // XXX
@@ -377,6 +383,7 @@ class EventCalendarElement extends HTMLElement {
     }.bind(this));
   }
 
+  // XXX: switch to batches instead individual instances by default
   addEvent(id, event) {
     if (this.events.has(id)) {
       throw new Error("id parameter is already in use in this calendar instance");
@@ -387,6 +394,15 @@ class EventCalendarElement extends HTMLElement {
     }
 
     this.events.set(id, event);
+  }
+
+  // XXX: switch to batches instead individual instances by default
+  removeEvent(id) {
+    if (!this.events.has(id)) {
+      throw new Error(`event not found in calendar: ${id}`);
+    }
+
+    this.events.remove(id);
   }
 
   navigatePresent() {
