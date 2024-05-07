@@ -235,8 +235,6 @@ class EventCalendarElement extends HTMLElement {
       this.cursor.startOf('month').startOf('week'),
       Duration.fromObject({days: this.itemElements.size}));
 
-    console.log(this.cursor, viewInterval.start.toString(), viewInterval.end.toString());
-
     // update item elements
     const viewDayIntervals = viewInterval.splitBy(Duration.fromObject({days: 1}));
     const viewElements = Array.from(this.itemElements.values());
