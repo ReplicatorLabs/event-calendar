@@ -68,8 +68,10 @@ EventCalendarStyleSheet.replaceSync(`
 .data-month {
   /* items are days in the month */
   grid-template-columns: repeat(7, 1fr); /* 7 days per week */
-  grid-template-rows: repeat(6, minmax(2em, 1fr)); /* 5 weeks per month */
+  grid-template-rows: repeat(6, 1fr); /* 5 weeks per month */
 }
+
+/* items */
 
 .item {
 }
@@ -79,20 +81,37 @@ EventCalendarStyleSheet.replaceSync(`
 }
 
 .item-nearby {
-  background-color: #888;
+  background-color: #aaa;
 }
 
 .item-faraway {
   background-color: #ccc;
 }
 
+/* item headers */
+
 .item-header {
   margin: 0;
   padding: 0 0.5rem;
 
-  background-color: #888;
   border: 1px solid black;
 }
+
+.item-present > .item-header {
+  background-color: #888;
+}
+
+.item-nearby > .item-header {
+  background-color: #888;
+}
+
+.item-faraway > .item-header {
+  background-color: #ccc;
+  border-color: #888;
+  color: #888;
+}
+
+/* events */
 
 .event {
   height: max-content;
