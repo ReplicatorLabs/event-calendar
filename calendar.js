@@ -128,7 +128,7 @@ class EventCalendarElement extends HTMLElement {
     super();
 
     // internal state
-    this.cursor = DateTime.now().startOf('day');
+    this.cursor = null;  // XXX
     this.events = new Map();
 
     // DOM
@@ -180,8 +180,8 @@ class EventCalendarElement extends HTMLElement {
     // DOM for events
     this.eventElements = new Map();
 
-    // initial refresh
-    this.refresh();
+    // initial navigation
+    this.navigatePresent();
   }
 
   /**
@@ -189,12 +189,26 @@ class EventCalendarElement extends HTMLElement {
    */
 
   async connectedCallback() {
-    // TODO: connect event handlers for controls
-    // this.headerElement.assignedElements().forEach(function (element) {
-    //   if (element.getAttribute('data-calendar-control')) {
-    //     console.log(element);
-    //   }
-    // });
+    // XXX: connect event handlers for controls
+    this.headerElement.assignedElements().forEach(function (element) {
+      if (element.getAttribute('data-calendar-control')) {
+        const selectedControl = element.getAttribute('data-calendar-control');
+
+        element.addEventListener('click', function (event) {
+          event.preventDefault();
+
+          if (selectedControl == 'next') {
+            this.navigateNext();
+          }
+          else if (selectedControl == 'previous') {
+            this.navigatePrevious();
+          }
+          else if (selectedControl == 'present') {
+            this.navigatePresent();
+          }
+        }.bind(this));
+      }
+    }.bind(this));
   }
 
   async disconnectedCallback() {
@@ -214,10 +228,14 @@ class EventCalendarElement extends HTMLElement {
    */
 
   refresh() {
+    const currentDateTime = DateTime.now();
+  
     // determine the view interval
     const viewInterval = Interval.after(
       this.cursor.startOf('month').startOf('week'),
       Duration.fromObject({days: this.itemElements.size}));
+
+    console.log(this.cursor, viewInterval.start.toString(), viewInterval.end.toString());
 
     // update item elements
     const viewDayIntervals = viewInterval.splitBy(Duration.fromObject({days: 1}));
@@ -237,11 +255,16 @@ class EventCalendarElement extends HTMLElement {
       // on the calendar below
       itemElement.setAttribute('data-event-offset', 0);
 
+      // remove any attached CSS classes
+      itemElement.classList.remove('item-present');
+      itemElement.classList.remove('item-nearby');
+      itemElement.classList.remove('item-faraway');
+
       // update item style to indicate the current day
-      if (itemDateTime.hasSame(this.cursor, 'day')) {
+      if (itemDateTime.hasSame(currentDateTime, 'day')) {
         itemElement.classList.add('item-present');
       }
-      // current month
+      // cursor month
       else if (itemDateTime.hasSame(this.cursor, 'month')) {
         itemElement.classList.add('item-nearby');
       }
@@ -257,11 +280,13 @@ class EventCalendarElement extends HTMLElement {
     }.bind(this));
 
     // delete existing event elements
-    this.eventElements.forEach(function (value) {
+    this.eventElements.forEach(function (value, key) {
       value.forEach(function (element) {
         this.dataElement.removeChild(element);
       }.bind(this));
     }.bind(this));
+
+    this.eventElements.clear();
 
     // filter events to ones overlapping with the current view
     // reason: avoid doing work for events that we can't see at all
@@ -315,7 +340,7 @@ class EventCalendarElement extends HTMLElement {
         element.setAttribute('data-event-offset', eventOffset);
       });
 
-      // TODO
+      // XXX
       const eventElements = new Array();
       const visibleWeekIntervals = visibleInterval.splitBy(Duration.fromObject({weeks: 1}));
       visibleWeekIntervals.forEach(function (weekInterval) {
@@ -364,6 +389,21 @@ class EventCalendarElement extends HTMLElement {
     }
 
     this.events.set(id, event);
+  }
+
+  navigatePresent() {
+    this.cursor = DateTime.now().startOf('month');
+    this.refresh();
+  }
+
+  navigateNext() {
+    this.cursor = this.cursor.plus({month: 1});
+    this.refresh();
+  }
+
+  navigatePrevious() {
+    this.cursor = this.cursor.minus({month: 1});
+    this.refresh();
   }
 }
 
