@@ -68,7 +68,7 @@ EventCalendarStyleSheet.replaceSync(`
 .data-month {
   /* items are days in the month */
   grid-template-columns: repeat(7, 1fr); /* 7 days per week */
-  grid-template-rows: repeat(6, 1fr); /* 5 weeks per month */
+  grid-template-rows: repeat(6, 1fr); /* 6 weeks per month */
 }
 
 /* items */
@@ -406,6 +406,6 @@ class EventCalendarElement extends HTMLElement {
 }
 
 // https://developer.mozilla.org/en-US/docs/Web/API/Window/customElements
-customElements.define("event-calendar", EventCalendarElement);
+customElements.define("replabs-event-calendar", EventCalendarElement);
 
 export { Event, EventCalendarElement };

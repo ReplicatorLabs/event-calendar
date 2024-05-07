@@ -2,7 +2,7 @@ import { DateTime, Duration, Interval } from "luxon";
 import { Event, EventCalendarElement } from "calendar";
 
 document.addEventListener('DOMContentLoaded', async function (event) {
-  await customElements.whenDefined('event-calendar');
+  await customElements.whenDefined('replabs-event-calendar');
   const calendarElement = document.querySelector('#calendar');
 
   const now = DateTime.now();
