@@ -1,6 +1,6 @@
 import { DateTime, Duration, Interval } from "luxon";
 
-class Event {
+class CalendarEvent {
   constructor(data) {
     this.interval = data.interval;
     this.title = data.title;
@@ -189,8 +189,8 @@ class EventCalendarElement extends HTMLElement {
    */
 
   async connectedCallback() {
-    // XXX: connect event handlers for controls
     this.headerElement.assignedElements().forEach(function (element) {
+      // XXX: connect event handlers for controls
       if (element.getAttribute('data-calendar-control')) {
         const selectedControl = element.getAttribute('data-calendar-control');
 
@@ -207,6 +207,17 @@ class EventCalendarElement extends HTMLElement {
             this.navigatePresent();
           }
         }.bind(this));
+      }
+
+      // XXX: connect event handlers for labels
+      if (element.getAttribute('data-calendar-display')) {
+        const labelFormat = element.getAttribute('data-calendar-display');
+        this.addEventListener('change', function () {
+          element.innerText = this.cursor.toFormat(labelFormat);
+        }.bind(this));
+
+        // XXX: initial content
+        element.innerText = this.cursor.toFormat(labelFormat);
       }
     }.bind(this));
   }
@@ -389,7 +400,7 @@ class EventCalendarElement extends HTMLElement {
       throw new Error("id parameter is already in use in this calendar instance");
     }
 
-    if (!(event instanceof Event)) {
+    if (!(event instanceof CalendarEvent)) {
       throw new Error("event parameter must be an Event instance");
     }
 
@@ -407,16 +418,19 @@ class EventCalendarElement extends HTMLElement {
 
   navigatePresent() {
     this.cursor = DateTime.now().startOf('month');
+    this.dispatchEvent(new Event('change')); // XXX
     this.refresh();
   }
 
   navigateNext() {
     this.cursor = this.cursor.plus({month: 1});
+    this.dispatchEvent(new Event('change')); // XXX
     this.refresh();
   }
 
   navigatePrevious() {
     this.cursor = this.cursor.minus({month: 1});
+    this.dispatchEvent(new Event('change')); // XXX
     this.refresh();
   }
 }
@@ -424,4 +438,4 @@ class EventCalendarElement extends HTMLElement {
 // https://developer.mozilla.org/en-US/docs/Web/API/Window/customElements
 customElements.define("replabs-event-calendar", EventCalendarElement);
 
-export { Event, EventCalendarElement };
+export { CalendarEvent, EventCalendarElement };
